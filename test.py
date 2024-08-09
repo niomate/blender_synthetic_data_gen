@@ -22,7 +22,7 @@ def random_scale(lo, hi):
 
 # Define a function that samples the pose of a given sphere
 def sample_pose_boxes(obj: bproc.types.MeshObject):
-    obj.set_location(np.random.uniform([4, 4, 1.1], [-4, -4, 1.1]))
+    obj.set_location(np.random.uniform([7, 7, 1.1], [-7, -7, 1.1]))
     obj.set_rotation_euler([np.radians(90), 0, random_angle()])
 
 def sample_pose(obj: bproc.types.MeshObject):
@@ -31,6 +31,15 @@ def sample_pose(obj: bproc.types.MeshObject):
 
 tube = bproc.loader.load_obj("tube.obj")[0]
 hexnut = bproc.loader.load_obj("hex.obj")[0]
+ball = bproc.loader.load_obj("ball.obj")[0]
+cube = bproc.loader.load_obj("cube.obj")[0]
+
+tube.set_cp("category_id", label_mapping.id_from_label("tube"))
+hexnut.set_cp("category_id", label_mapping.id_from_label("hex"))
+ball.set_cp("category_id", label_mapping.id_from_label("ball"))
+cube.set_cp("category_id", label_mapping.id_from_label("cube"))
+
+objects = [tube, hexnut, ball, cube]
 
 objs = bproc.loader.load_blend("scene.blend", obj_types=["mesh", "empty", "light"], data_blocks=["objects", "lights"])
 white_box = bproc.filter.one_by_attr(bproc.filter.all_with_type(objs, bproc.types.MeshObject), "name", "White Box")
@@ -42,26 +51,18 @@ ground.enable_rigidbody(active=False)
 ground.set_cp("category_id", label_mapping.id_from_label("ground"))
 
 materials = bproc.material.collect_all()
-materials = [bproc.filter.one_by_attr(materials, "name", x) for x in MATERIALS]
-
-tube.set_cp("category_id", label_mapping.id_from_label("tube"))
-hexnut.set_cp("category_id", label_mapping.id_from_label("hex"))
-
-objects = [tube, hexnut]
-
-for primitive in ["CUBE", "SPHERE"]:
-    # Create a simple object:
-    obj = bproc.object.create_primitive(primitive)
-    obj.set_shading_mode("auto")
-    obj.set_cp("category_id", label_mapping.id_from_label("cube" if primitive == "CUBE" else "ball"))
-    objects.append(obj)
+materials = [bproc.filter.one_by_attr(materials, "name", x + " Scratched") for x in MATERIALS]
 
 N_IMAGES = 500
 
 for i in range(N_IMAGES):
     bproc.utility.reset_keyframes()
 
-    for box in boxes:
+    cam_pose = bproc.math.build_transformation_mat([0, -14.776, 21.518], [np.radians(36.6), 0, 0])
+    bproc.camera.add_camera_pose(cam_pose)
+    bproc.camera.set_intrinsics_from_blender_params(lens=50, lens_unit="MILLIMETERS", image_height=480, image_width=640)
+
+    for box in boxes:       
         box.enable_rigidbody(active=True, collision_shape="MESH")
         box.set_cp("category_id", label_mapping.id_from_label("box"))
 
@@ -71,20 +72,22 @@ for i in range(N_IMAGES):
         obj.add_material(random.choice(materials))
         obj.enable_rigidbody(active=True)
 
-    bproc.object.sample_poses(
-        boxes,
-        sample_pose_func=sample_pose_boxes
-    )
-
     # Sample the poses of all spheres above the ground without any collisions in-between
     bproc.object.sample_poses(
         objects,
         sample_pose_func=sample_pose
     )
+   
+    bproc.object.sample_poses(
+        boxes,
+        sample_pose_func=sample_pose_boxes,
+        objects_to_check_collisions=boxes + [ground]
+    )
 
-    # Set the camera to be in front of the object
-    cam_pose = bproc.math.build_transformation_mat([0, -14.776, 21.518], [np.radians(36.6), 0, 0])
-    bproc.camera.add_camera_pose(cam_pose)
+
+    for box in boxes:        
+        box.enable_rigidbody(active=False, collision_shape="MESH")
+
 
     bproc.object.simulate_physics_and_fix_final_poses(min_simulation_time=4, max_simulation_time=20, check_object_interval=1)
     # Render the scene
@@ -92,7 +95,7 @@ for i in range(N_IMAGES):
     data = bproc.renderer.render()
 
     # Write the rendering into an hdf5 file
-    bproc.writer.write_coco_annotations(os.path.join("output2", "coco_data"),
+    bproc.writer.write_coco_annotations(os.path.join("output", "coco_data"),
                                         instance_segmaps=data["instance_segmaps"],
                                         instance_attribute_maps=data["instance_attribute_maps"],
                                         colors=data["colors"],

@@ -1,5 +1,1 @@
-- Script to remove unused "ground" annotations (id 0)
-- Fix edge cases where scene is exploding randomly 
 - Post processing (lens distortion etc)
-- More realistic lighting
-- Textures
